@@ -1,0 +1,10 @@
+Visualize invariant of integer rotation.
+Uses:
+     libpng and png++ - C++ wrapper for libpng. (Usually can be found in the repository).
+     CMake as build system (not really needed).
+
+Ugly, write-once code.
+
+All settings are in the "main" function in the code.
+
+Compile flags are in the CMakeFIles.
