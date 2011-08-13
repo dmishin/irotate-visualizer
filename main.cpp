@@ -5,6 +5,9 @@
 #include <set>
 #include <algorithm>
 #include <cassert>
+#include <boost/program_options.hpp>
+#include <boost/lexical_cast.hpp>
+#include <string>
 
 using namespace std;
 
@@ -69,7 +72,7 @@ size_t diagram::calculate( double angle ){
     irot rotate( angle );
 
     for ( int yy = 0; yy < (int)size; ++ yy ){
-	cout<< yy << " of "<< size <<endl;
+	cout<< yy << " of "<< size << "    \r";
 	for ( int xx = 0; xx < (int)size; ++xx ){ 
 	    int p0x=xx-xc, p0y=yy-yc;
 	    if ( at( xx, yy ) != NO_ORBIT ) continue; //this point is already processed.
@@ -282,34 +285,93 @@ void colorize::operator()(size_t num_iters)
 {
     random_init();
     for( size_t i =0; i < num_iters; ++i){
-	cout<<"Step "<<i<<" of "<<num_iters<<endl;
+	cout<<"Step "<<i<<" of "<<num_iters<<"    \r";
 	iterate();
     };
 }
 
+namespace po = boost::program_options;
+
 int main(int argc, char *argv[])
 {
-    srand( time(NULL) );
-    const size_t diagram_size = 2048;
-    const size_t smoothing_steps = 20;
-    double angle = M_PI/7*2;
-    const char * image_name = "output.png";
+    using boost::lexical_cast;
+    using boost::bad_lexical_cast;
 
-    cout<<"Building diagram..."<<endl;
+    size_t diagram_size = 2048;
+    size_t smoothing_steps = 20;
+    double angle = M_PI/7*2;
+    string image_name = "output.png";
+    string s_angle;
+
+    //parsing and setting program options
+    po::options_description desc("Allowed options");
+    desc.add_options()
+	("help", "Show help message")
+	("size,s", po::value<size_t>( &diagram_size )->default_value(512), 
+	 "Size of the image to generate. Default is 512.")
+	("smoothing,S", po::value<size_t>( &smoothing_steps )->default_value(10), 
+	 "How many smoothing steps to perform. Default is 10.")
+	("output,o", po::value<string>( &image_name )->default_value("output.png"), 
+	 "Output file name, PNG format is used.")
+	("angle,a", po::value<string>( &s_angle ), "Angle, given as multiplier to PI. for example, '2/5' gives 2/5PI");
+
+    po::variables_map vm;
+    try{
+	po::store( po::parse_command_line( argc, argv, desc ), vm );
+	po::notify( vm );
+    }catch( exception e ){
+	cerr<<"Failed to parse command-line options:"<<e.what()<<endl;
+	return 1;
+    }
+    if( vm.count("help") ){
+	cout << desc <<endl;
+	return 0;
+    }
+    if ( diagram_size > 10000 ){
+	cerr << "Size is too big"<<endl;
+	return 1;
+    }
+    
+    if (s_angle.empty()){
+	angle = M_PI/5*2;
+    }else{
+	try{
+	    size_t slash_pos = s_angle.find( "/" );
+	    if (slash_pos == s_angle.npos ){
+		//no slash
+		double angle_k = lexical_cast<double>(s_angle);
+		angle = angle_k * M_PI;
+		cout << "Using angle "<<angle_k<<" PI"<<endl;
+	    }else{
+		double num = lexical_cast<double>( s_angle.substr( 0, slash_pos ) );
+		double den = lexical_cast<double>( s_angle.substr( slash_pos+1 ) );
+		angle = M_PI * num / den;
+		cout << "Using angle "<<num<<"/"<<den<<" PI"<<endl;
+	    }
+	}catch( bad_lexical_cast e ){
+	    cerr<<"Failed to parse angle:"<<e.what()<<endl;
+	    return 1;
+	}
+    }
+    
+
+    srand( time(NULL) );
+
+    cout<<"Searching for all orbits..."<<endl;
     diagram dia( diagram_size );
     size_t orbits = dia.calculate( angle );
-    std::cout<<"FOund "<<orbits<<" orbits"<<std::endl;
+    std::cout<<"Found "<<orbits<<" orbits"<<std::endl;
 
-    cout<<"Now building graph"<<endl;
+    cout<<"Now building orbit adjacency graph"<<endl;
     build_graph graph( dia, orbits );
     cout<<"Done"<<endl;
 
     cout<<"Now colorizing "<<smoothing_steps<<" steps"<<endl;
     colorize colorizer( graph );
     colorizer( smoothing_steps );
-    cout <<"Done coorizing"<<endl;
+    cout <<"Done colorizing"<<endl;
     cout<<"Writing image "<<image_name<<endl;
-    colorizer.write_image( dia, image_name );
+    colorizer.write_image( dia, image_name.c_str() );
     
     return 0;
 }

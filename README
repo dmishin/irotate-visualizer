@@ -8,3 +8,18 @@ Ugly, write-once code.
 All settings are in the "main" function in the code.
 
 Compile flags are in the CMakeFIles.
+
+
+Compilation (with CMake):
+
+$ mkdir build
+$ cd build
+$ cmake ../
+$ make
+
+
+Installation:
+  Do not install it.
+
+Running:
+ Just run the executable and see result.
