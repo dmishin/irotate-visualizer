@@ -72,7 +72,7 @@ size_t diagram::calculate( double angle ){
     irot rotate( angle );
 
     for ( int yy = 0; yy < (int)size; ++ yy ){
-	cout<< yy << " of "<< size << "    \r";
+	cout<< yy << " of "<< size << "    \r"; cout.flush();
 	for ( int xx = 0; xx < (int)size; ++xx ){ 
 	    int p0x=xx-xc, p0y=yy-yc;
 	    if ( at( xx, yy ) != NO_ORBIT ) continue; //this point is already processed.
@@ -286,6 +286,7 @@ void colorize::operator()(size_t num_iters)
     random_init();
     for( size_t i =0; i < num_iters; ++i){
 	cout<<"Step "<<i<<" of "<<num_iters<<"    \r";
+	cout.flush();
 	iterate();
     };
 }
