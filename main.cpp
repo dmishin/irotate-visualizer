@@ -54,10 +54,10 @@ struct diagram{
     size_t at( int x, int y)const{
 	return data[x+y*size];
     };
-    size_t calculate( double angle );
+    size_t calculate( double angle, size_t repeats=1 );
 };
 
-size_t diagram::calculate( double angle ){
+size_t diagram::calculate( double angle, size_t repeats ){
     size_t next_idx = 0; //starting numeration from 1.    
     point_vector_t points;
     size_t NO_ORBIT = (size_t)(-1);
@@ -82,7 +82,8 @@ size_t diagram::calculate( double angle ){
 	    int px = p0x, py = p0y; //current point
 	    size_t iters = 0;
 	    while ( ++iters < max_iters ){
-		rotate.rotate( px, py );
+		for( size_t i_rep=0; i_rep < repeats; ++ i_rep) //rotate several times
+		    rotate.rotate( px, py );
 		int px_s = px + xc, py_s = py + yc;
 		if ( orbit == NO_ORBIT && in_range(px_s, py_s) ){
 		    if ( px == p0x && py==p0y ) 
@@ -303,6 +304,7 @@ int main(int argc, char *argv[])
     double angle = M_PI/7*2;
     string image_name = "output.png";
     string s_angle;
+    size_t repeats = 1;
 
     //parsing and setting program options
     po::options_description desc("Allowed options");
@@ -314,7 +316,9 @@ int main(int argc, char *argv[])
 	 "How many smoothing steps to perform. Default is 10.")
 	("output,o", po::value<string>( &image_name )->default_value("output.png"), 
 	 "Output file name, PNG format is used.")
-	("angle,a", po::value<string>( &s_angle ), "Angle, given as multiplier to PI. for example, '2/5' gives 2/5PI");
+	("angle,a", po::value<string>( &s_angle ), "Angle, given as multiplier to PI. for example, '2/5' gives 2/5PI")
+	("repeat,r", po::value<size_t>( &repeats )->default_value(1), "How many times to repeat rotation (default is 1)" );
+    
 
     po::variables_map vm;
     try{
@@ -360,7 +364,7 @@ int main(int argc, char *argv[])
 
     cout<<"Searching for all orbits..."<<endl;
     diagram dia( diagram_size );
-    size_t orbits = dia.calculate( angle );
+    size_t orbits = dia.calculate( angle, repeats );
     std::cout<<"Found "<<orbits<<" orbits"<<std::endl;
 
     cout<<"Now building orbit adjacency graph"<<endl;
