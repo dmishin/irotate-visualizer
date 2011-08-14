@@ -40,7 +40,7 @@ struct diagram{
 
     diagram( size_t size_ ){
 	size = size_;
-	max_iters = size*100; //guard to avoid hanging, if algorithm goes into infinite cycle.
+	max_iters = 0; 
     }
 
     bool in_range( int x, int y ) const {
@@ -54,10 +54,10 @@ struct diagram{
     size_t at( int x, int y)const{
 	return data[x+y*size];
     };
-    size_t calculate( double angle, size_t repeats=1 );
+    size_t calculate( double angle, int dx, int dy, size_t repeats=1 );
 };
 
-size_t diagram::calculate( double angle, size_t repeats ){
+size_t diagram::calculate( double angle, int dx, int dy, size_t repeats ){
     size_t next_idx = 0; //starting numeration from 1.    
     point_vector_t points;
     size_t NO_ORBIT = (size_t)(-1);
@@ -69,12 +69,14 @@ size_t diagram::calculate( double angle, size_t repeats ){
     yc = size / 2;
     xc = size / 2;
 
+    max_iters = size/2+max(abs(dx),(dy)) * 100; //guard to avoid hanging, if algorithm goes into infinite cycle.
+
     irot rotate( angle );
 
     for ( int yy = 0; yy < (int)size; ++ yy ){
 	cout<< yy << " of "<< size << "    \r"; cout.flush();
 	for ( int xx = 0; xx < (int)size; ++xx ){ 
-	    int p0x=xx-xc, p0y=yy-yc;
+	    int p0x=xx-xc+dx, p0y=yy-yc+dy;
 	    if ( at( xx, yy ) != NO_ORBIT ) continue; //this point is already processed.
             
 	    points.push_back( make_pair(xx, yy));
@@ -84,7 +86,7 @@ size_t diagram::calculate( double angle, size_t repeats ){
 	    while ( ++iters < max_iters ){
 		for( size_t i_rep=0; i_rep < repeats; ++ i_rep) //rotate several times
 		    rotate.rotate( px, py );
-		int px_s = px + xc, py_s = py + yc;
+		int px_s = px + xc - dx, py_s = py + yc - dy; //screen coordinates
 		if ( orbit == NO_ORBIT && in_range(px_s, py_s) ){
 		    if ( px == p0x && py==p0y ) 
 			break; //cycle closed
@@ -99,9 +101,7 @@ size_t diagram::calculate( double angle, size_t repeats ){
 	    }
 	    point_vector_t::iterator ip, ep = points.end();
 	    for ( ip = points.begin(); ip != ep; ++ip){
-		if ( in_range(ip->first, ip->second) ){
-		    at(ip->first, ip->second) = orbit;
-		}
+		at(ip->first, ip->second) = orbit;
 	    }
 	    points.clear();
 	}
@@ -305,6 +305,7 @@ int main(int argc, char *argv[])
     string image_name = "output.png";
     string s_angle;
     size_t repeats = 1;
+    int dx = 0, dy = 0;
 
     //parsing and setting program options
     po::options_description desc("Allowed options");
@@ -317,7 +318,9 @@ int main(int argc, char *argv[])
 	("output,o", po::value<string>( &image_name )->default_value("output.png"), 
 	 "Output file name, PNG format is used.")
 	("angle,a", po::value<string>( &s_angle ), "Angle, given as multiplier to PI. for example, '2/5' gives 2/5PI")
-	("repeat,r", po::value<size_t>( &repeats )->default_value(1), "How many times to repeat rotation (default is 1)" );
+	("repeat,r", po::value<size_t>( &repeats )->default_value(1), "How many times to repeat rotation (default is 1)" )
+	("dx,x", po::value<int>( & dx )->default_value(0), "Horizontal offset, default is 0: center of the image is rendered" )
+	("dy,y", po::value<int>( & dy )->default_value(0), "Vertical offset, default is 0: center of the image is rendered" );
     
 
     po::variables_map vm;
@@ -364,7 +367,7 @@ int main(int argc, char *argv[])
 
     cout<<"Searching for all orbits..."<<endl;
     diagram dia( diagram_size );
-    size_t orbits = dia.calculate( angle, repeats );
+    size_t orbits = dia.calculate( angle, dx, dy, repeats );
     std::cout<<"Found "<<orbits<<" orbits"<<std::endl;
 
     cout<<"Now building orbit adjacency graph"<<endl;
