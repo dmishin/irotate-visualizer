@@ -11,6 +11,6 @@ link_directories ( ${Boost_LIBRARY_DIRS} )
 include_directories ( ${Boost_INCLUDE_DIRS} )
 
 
-add_executable( vizualizer main.cpp )
+add_executable( vizualizer main.cpp color_conversions.cpp )
 TARGET_LINK_LIBRARIES(vizualizer ${PNG_LIBS} ${Boost_LIBRARIES} )
 

@@ -8,6 +8,8 @@
 #include <boost/program_options.hpp>
 #include <boost/lexical_cast.hpp>
 #include <string>
+#include <locale>
+#include "color_conversions.hpp"
 
 using namespace std;
 
@@ -108,36 +110,6 @@ size_t diagram::calculate( double angle, int dx, int dy, size_t repeats ){
     }
     return next_idx;
 };
-struct color{
-    double r,g,b;
-    color(){};
-    color( double r_, double g_, double b_ )
-	:r(r_), g(g_), b(b_){};
-    color operator *( double k )const{
-	return color(r*k, g*k,b*k);
-    };
-    color operator + (const color & c)const{
-	return color(r+c.r, g+c.g, b+c.b);
-    };
-    color operator + (double d )const{
-	return color( r+d, g+d, b+d);
-    };
-    color normalize()const{
-        double m = max( max( fabs(r-0.5), fabs(g-0.5) ),
-			max( fabs(b-0.5), 1e-5) ); // 0 < m < 0.5
-        double k = 0.5 / m;
-	return (*this + -0.5)*k+0.5;
-    };
-    int int_r()const{
-	return int(floor(r*255));
-    };
-    int int_g()const{
-	return int(floor(g*255));
-    };
-    int int_b()const{
-	return int(floor(b*255));
-    };
-};
 
 struct build_graph{
     const diagram & diag;
@@ -197,6 +169,9 @@ void build_graph::compile_graph()
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// RGB colorization
+////////////////////////////////////////////////////////////////////////////////
 struct colorize{
     build_graph & graph;
     typedef std::vector< color > colormap_t;
@@ -212,6 +187,7 @@ struct colorize{
     void random_init();
     void auto_levels();
 };
+
 void colorize::auto_levels()
 {
     double r0=1,g0=1,b0=1;
@@ -292,7 +268,125 @@ void colorize::operator()(size_t num_iters)
     };
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// LAB colorization
+////////////////////////////////////////////////////////////////////////////////
+struct colorize_lab{
+    build_graph & graph;
+    typedef std::vector< lab_color > colormap_t;
+    colormap_t colormap;
+    colorize_lab( build_graph & graph_ )
+	:graph( graph_ ),
+	 colormap( graph_.num_groups ){
+    };
+    lab_color meancolor( size_t orbit );
+    void iterate();
+    void operator()(size_t num_iters);
+    void write_image( const diagram & dia, const char * ofile );
+    void random_init();
+    void auto_levels();
+};
+
+void colorize_lab::auto_levels()
+{
+    double r0=1,g0=1,b0=1;
+    double r1=0,g1=0,b1=0;
+    for( colormap_t::const_iterator i = colormap.begin(); i != colormap.end(); ++ i){
+	color c( lab2rgb( *i ) );
+	r0 = min( r0, c.r );
+	g0 = min( g0, c.g );
+	b0 = min( b0, c.b );
+	r1 = max( r1, c.r );
+	g1 = max( g1, c.g );
+	b1 = max( b1, c.b );
+    }
+    double kr = 1 / max( 1e-5, r1-r0 );
+    double kg = 1 / max( 1e-5, g1-g0 );
+    double kb = 1 / max( 1e-5, b1-b0 );
+    for( colormap_t::iterator i = colormap.begin(); i != colormap.end(); ++i) {
+	color c = lab2rgb( *i );
+	color c1( (c.r - r0)*kr,
+		  (c.g - g0)*kg,
+		  (c.b - b0)*kb );
+	*i = rgb2lab( c1 );
+    }
+}
+	
+
+	
+void colorize_lab::random_init()
+{
+    for( size_t i = 0; i < colormap.size(); ++i){
+	lab_color randc( rand()/(double)RAND_MAX * 100,
+			 rand()/(double)RAND_MAX * 100 - 50,
+			 rand()/(double)RAND_MAX * 100 - 50 );
+	colormap[i]= randc.normalize();
+    }
+}
+
+void colorize_lab::write_image( const diagram & dia, const char * ofile )
+{
+    png::image< png::rgb_pixel > image( dia.size, dia.size );
+    for( size_t y = 0; y<dia.size; ++y){
+	for( size_t x = 0; x<dia.size; ++x){
+	    color c = lab2rgb( colormap[ dia.at(x,y) ] ).normalize();
+	    image[y][x] = png::rgb_pixel( 
+		c.int_r(), c.int_g(), c.int_b() );
+	}
+    }
+    image.write( ofile );
+}
+lab_color colorize_lab::meancolor( size_t orbit )
+{
+    lab_color rval(0,0,0);
+    build_graph::graph_record_t::const_iterator i, e;
+    build_graph::graph_record_t & neighbores( graph.neighbores( orbit));
+    e = neighbores.end();
+    for( i = neighbores.begin(); i != e; ++i ){
+	rval = rval + colormap[ *i ];
+    }
+    if (neighbores.size() == 0 ){
+	return lab_color(0.5, 0, 0);
+    }else{
+	return rval * (1.0/neighbores.size());
+    };
+}
+    
+void colorize_lab::iterate()
+{
+    colormap_t new_colormap( colormap.size() );
+    for( size_t i = 0; i < colormap.size(); ++ i){
+	new_colormap[i] = meancolor( i ).normalize();
+    };
+    colormap.swap(new_colormap);
+}
+
+void colorize_lab::operator()(size_t num_iters)
+{
+    random_init();
+    for( size_t i =0; i < num_iters; ++i){
+	cout<<"Step "<<i<<" of "<<num_iters<<"    \r";
+	cout.flush();
+	iterate();
+    };
+}
+
 namespace po = boost::program_options;
+
+enum ColorModelT{
+    COLOR_MODEL_RGB,
+    COLOR_MODEL_LAB,
+    COLOR_MODEL_UNKNOWN
+};
+ColorModelT convert_cm( const string & cm_name ){
+    string sname;
+    transform( cm_name.begin(), cm_name.end(), back_inserter( sname ), ::tolower );
+    if ( sname == "rgb" )
+	return COLOR_MODEL_RGB;
+    if ( sname == "lab" )
+	return COLOR_MODEL_LAB;
+    return COLOR_MODEL_UNKNOWN;
+}
 
 int main(int argc, char *argv[])
 {
@@ -304,6 +398,8 @@ int main(int argc, char *argv[])
     double angle = M_PI/7*2;
     string image_name = "output.png";
     string s_angle;
+    string s_color_model = "rgb";
+    ColorModelT color_model;
     size_t repeats = 1;
     int dx = 0, dy = 0;
 
@@ -320,9 +416,10 @@ int main(int argc, char *argv[])
 	("angle,a", po::value<string>( &s_angle ), "Angle, given as multiplier to PI. for example, '2/5' gives 2/5PI")
 	("repeat,r", po::value<size_t>( &repeats )->default_value(1), "How many times to repeat rotation (default is 1)" )
 	("dx,x", po::value<int>( & dx )->default_value(0), "Horizontal offset, default is 0: center of the image is rendered" )
-	("dy,y", po::value<int>( & dy )->default_value(0), "Vertical offset, default is 0: center of the image is rendered" );
+	("dy,y", po::value<int>( & dy )->default_value(0), "Vertical offset, default is 0: center of the image is rendered" )
+	("color,C", po::value<string>( &s_color_model )->default_value("rgb"), 
+	 "Color model to use for smoothing. Possbile values are RGB (default) and LAB" );
     
-
     po::variables_map vm;
     try{
 	po::store( po::parse_command_line( argc, argv, desc ), vm );
@@ -339,6 +436,12 @@ int main(int argc, char *argv[])
 	cerr << "Size is too big"<<endl;
 	return 1;
     }
+    color_model = convert_cm( s_color_model );
+    if (color_model == COLOR_MODEL_UNKNOWN ){
+	cerr << "Unknown name of the oclor model: "<<s_color_model<<endl;
+	return 1;
+    }
+
     
     if (s_angle.empty()){
 	angle = M_PI/5*2;
@@ -375,11 +478,21 @@ int main(int argc, char *argv[])
     cout<<"Done"<<endl;
 
     cout<<"Now colorizing "<<smoothing_steps<<" steps"<<endl;
-    colorize colorizer( graph );
-    colorizer( smoothing_steps );
-    cout <<"Done colorizing"<<endl;
-    cout<<"Writing image "<<image_name<<endl;
-    colorizer.write_image( dia, image_name.c_str() );
+    if (color_model == COLOR_MODEL_RGB ){
+	cout << "Using RGB color model for smoothing"<<endl;
+	colorize colorizer( graph );
+	colorizer( smoothing_steps );
+	cout <<"Done colorizing"<<endl;
+	cout<<"Writing image "<<image_name<<endl;
+	colorizer.write_image( dia, image_name.c_str() );
+    }else if (color_model == COLOR_MODEL_LAB ){
+	cout << "Using LAB color model for smoothing"<<endl;
+	colorize_lab colorizer( graph );
+	colorizer( smoothing_steps );
+	cout <<"Done colorizing"<<endl;
+	cout<<"Writing image "<<image_name<<endl;
+	colorizer.write_image( dia, image_name.c_str() );
+    }
     
     return 0;
 }
