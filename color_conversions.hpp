@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-static const double LAB_NORM_RADIUS = 60; //radius of th esphere in Lab space to normalize colors to.
+static const double LAB_NORM_RADIUS = 50; //radius of th esphere in Lab space to normalize colors to.
 
 struct color{
     double r,g,b;

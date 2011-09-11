@@ -10,6 +10,7 @@
 #include <string>
 #include <locale>
 #include "color_conversions.hpp"
+#include <fstream>
 
 using namespace std;
 
@@ -157,6 +158,7 @@ struct build_graph{
 	    insert( temp_graph[v0], v1 );
 	}
     };
+    void write( ostream& os );
 };
 void build_graph::compile_graph()
 {
@@ -169,6 +171,16 @@ void build_graph::compile_graph()
     }
 }
 
+/**Writing graph information to the output stream in simple format*/
+void build_graph::write( ostream& os )
+{
+    for ( size_t i = 0; i < num_groups; ++i ){
+	graph_record_t &rec = graph[ i ];
+	for( graph_record_t::iterator tgt = rec.begin(); tgt != rec.end(); ++ tgt){
+	    os << i << "-" << *tgt << endl;
+	}
+    }
+}
 ////////////////////////////////////////////////////////////////////////////////
 // RGB colorization
 ////////////////////////////////////////////////////////////////////////////////
@@ -399,6 +411,7 @@ int main(int argc, char *argv[])
     string image_name = "output.png";
     string s_angle;
     string s_color_model = "rgb";
+    string s_write_graph;
     ColorModelT color_model;
     size_t repeats = 1;
     int dx = 0, dy = 0;
@@ -418,7 +431,9 @@ int main(int argc, char *argv[])
 	("dx,x", po::value<int>( & dx )->default_value(0), "Horizontal offset, default is 0: center of the image is rendered" )
 	("dy,y", po::value<int>( & dy )->default_value(0), "Vertical offset, default is 0: center of the image is rendered" )
 	("color,C", po::value<string>( &s_color_model )->default_value("rgb"), 
-	 "Color model to use for smoothing. Possbile values are RGB (default) and LAB" );
+	 "Color model to use for smoothing. Possbile values are RGB (default) and LAB" )
+	("output-graph,G", po::value<string>( &s_write_graph ),
+	 "Name of the file to write adjacency graph information to. When not specified, file not written" );
     
     po::variables_map vm;
     try{
@@ -438,7 +453,7 @@ int main(int argc, char *argv[])
     }
     color_model = convert_cm( s_color_model );
     if (color_model == COLOR_MODEL_UNKNOWN ){
-	cerr << "Unknown name of the oclor model: "<<s_color_model<<endl;
+	cerr << "Unknown name of the color model: "<<s_color_model<<endl;
 	return 1;
     }
 
@@ -476,6 +491,11 @@ int main(int argc, char *argv[])
     cout<<"Now building orbit adjacency graph"<<endl;
     build_graph graph( dia, orbits );
     cout<<"Done"<<endl;
+
+    if ( !s_write_graph.empty() ){
+	ofstream sgraph( s_write_graph.c_str() );
+	graph.write( sgraph );
+    }
 
     cout<<"Now colorizing "<<smoothing_steps<<" steps"<<endl;
     if (color_model == COLOR_MODEL_RGB ){
